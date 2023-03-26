@@ -2,7 +2,7 @@
 usage() {
 echo -n -e "\nUsage: sahw2.sh {--sha256 hashes ... | --md5 hashes ...} -i files ...\n\n--sha256: SHA256 hashes to validate input files.\n--md5: MD5 hashes to validate input files.\n-i: Input files.\n"
 }
-declare -a hashes
+
 export NUM=0;
 export Hash_First=0;
 
@@ -110,15 +110,20 @@ case $1 in
         exit 1;;
 esac 
 
-# (jq)
-#for file in "$@"; do
-#    file_type=$(file -b --mime-type "$file")
-#    case "$file_type" in
-#        application/json*)
-#            jq '.' "$file"
-#        ;;
-#        text/csv*)
-#            csvlook "$file"
-#        ;;
-#    esac
-#sdone
+declare -a usernames
+
+for i in $(seq 1 "$NUM"); do
+    x=$(($i+$NUM+$Hash_First+1))
+    file_type=$(file "${!x}")
+    if [ "$file_type" | grep -q "CSV" ] ; then
+        temp=( $(awk -F',' '{print $1}' ${!x}) )
+        usernames=("${usernames[@]}" "${temp[@]}")
+    elif [ "$file_type" | grep -q "json" ] ; then
+        temp=$(cat "test2.json" | jq -r '.[].username' | tr '\n' ' ')
+        usernames=("${usernames[@]}" "${temp[@]}")
+    else
+        echo "Error: Invalid file format."
+    fi
+done
+
+echo "${usernames[@]}"
