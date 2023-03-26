@@ -6,7 +6,7 @@ echo -n -e "\nUsage: sahw2.sh {--sha256 hashes ... | --md5 hashes ...} -i files 
 export NUM=0;
 export Hash_First=0;
 
-function md5_checksum(){
+md5_checksum(){
     for i in "$@"; do
         if [ "$i" == "--sha256" ] ; then
             echo -n "Error: Only one type of hash function is allowed." >&2
@@ -115,15 +115,28 @@ declare -a usernames
 for i in $(seq 1 "$NUM"); do
     x=$(($i+$NUM+$Hash_First+1))
     file_type=$(file "${!x}")
-    if [ "$file_type" | grep -q "CSV" ] ; then
-        temp=( $(awk -F',' '{print $1}' ${!x}) )
-        usernames=("${usernames[@]}" "${temp[@]}")
-    elif [ "$file_type" | grep -q "json" ] ; then
-        temp=$(cat "test2.json" | jq -r '.[].username' | tr '\n' ' ')
-        usernames=("${usernames[@]}" "${temp[@]}")
+    if [[ "$file_type" =~ CSV ]] ; then 
+        usernames+=( $(awk -F',' 'NR>1 {print $1}' ${!x}) )
+        #passwords+=( $(awk -F',' 'NR>1 {print $2}' ${!x}) )
+        #shells+=( $(awk -F',' 'NR>1 {print $3}' ${!x}) )
+        #groups+=( $(awk -F',' 'NR>1 {print $4}' ${!x}) )
+    elif [[ "$file_type" =~ json ]] ; then
+        usernames+=$(cat "test2.json" | jq -r '.[].username' | tr '\n' ' ')
+        #passwords+=$(cat "test2.json" | jq -r '.[].password' | tr '\n' ' ')
+        #shells+=$(cat "test2.json" | jq -r '.[].shell' | tr '\n' ' ')
+        #groups+=$(cat "test2.json" | jq '.[].groups' | tr '\n' ' ')
     else
         echo "Error: Invalid file format."
     fi
 done
 
-echo "${usernames[@]}"
+echo -n "This script will create the following user(s): "
+echo -n "${usernames[@]}"
+echo -n "Do you want to continue? [y/n]:"
+read confirm
+if [ "$confirm" == "n" ] || [ -z "$confirm" ] ; then
+    exit 0
+fi
+
+
+
