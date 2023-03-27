@@ -33,7 +33,7 @@ md5_checksum(){
         #recognize file extension
         #calculate hash value
         x=$(($i+$NUM+$Hash_First+1))
-        md5_hash=$(md5sum ${!x} | awk '{ print $1 }')
+        md5_hash="$(md5sum "${!x}" | awk '{ print $1 }')"
         #compare hash value and input hash 
         y=$(($i-$Hash_First))
         if [ "$md5_hash" != "${!y}" ] ; then
@@ -55,7 +55,7 @@ sha256_checksum(){
             break
         fi
         if [ "$i" == "--sha256" ] ; then
-            ((Hash_First=-n-1))
+            ((Hash_First=-NUM-1))
             break
         fi
         ((NUM++))
@@ -70,7 +70,7 @@ sha256_checksum(){
         #recognize file extension
         #calculate hash value
         x=$(($i+$NUM+$Hash_First+1))
-        sha256_hash=$(sha256sum ${!x} | awk '{ print $1 }')
+        sha256_hash="$(sha256sum "${!x}" | awk '{ print $1 }')"
         #compare hash value and input hash 
         y=$(($i-$Hash_First))
         if [ "$sha256_hash" != "${!y}" ] ; then
@@ -111,6 +111,9 @@ case $1 in
 esac 
 
 declare -a usernames
+declare -a passwords
+declare -a shells
+declare -A groups
 
 for i in $(seq 1 "$NUM"); do
     x=$(($i+$NUM+$Hash_First+1))
@@ -124,15 +127,16 @@ for i in $(seq 1 "$NUM"); do
         usernames+=$(cat "test2.json" | jq -r '.[].username' | tr '\n' ' ')
         #passwords+=$(cat "test2.json" | jq -r '.[].password' | tr '\n' ' ')
         #shells+=$(cat "test2.json" | jq -r '.[].shell' | tr '\n' ' ')
-        #groups+=$(cat "test2.json" | jq '.[].groups' | tr '\n' ' ')
+        #groups+=$(cat "test2.json" | jq '.[].groups[]' | tr '\n' ' ')
     else
         echo "Error: Invalid file format."
+        exit 1
     fi
 done
 
 echo -n "This script will create the following user(s): "
 echo -n "${usernames[@]}"
-echo -n "Do you want to continue? [y/n]:"
+echo -n " Do you want to continue? [y/n]:"
 read confirm
 if [ "$confirm" == "n" ] || [ -z "$confirm" ] ; then
     exit 0
