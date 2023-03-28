@@ -111,36 +111,107 @@ case $1 in
 esac 
 
 declare -a usernames
+declare -a tmpuname
 declare -a passwords
+declare -a tmppw
 declare -a shells
-declare -A groups
+declare -a tmpsh
+declare -a groups
 
-for i in $(seq 1 "$NUM"); do
-    x=$(($i+$NUM+$Hash_First+1))
-    file_type=$(file "${!x}")
+usernum=0
+for j in $(seq 1 "$NUM"); do
+    x=$(($j+$NUM+$Hash_First+1))
+    file_type=$(file -b "${!x}")
     if [[ "$file_type" =~ CSV ]] ; then 
-        usernames+=( $(awk -F',' 'NR>1 {print $1}' ${!x}) )
-        #passwords+=( $(awk -F',' 'NR>1 {print $2}' ${!x}) )
-        #shells+=( $(awk -F',' 'NR>1 {print $3}' ${!x}) )
-        #groups+=( $(awk -F',' 'NR>1 {print $4}' ${!x}) )
-    elif [[ "$file_type" =~ json ]] ; then
-        usernames+=$(cat "test2.json" | jq -r '.[].username' | tr '\n' ' ')
-        #passwords+=$(cat "test2.json" | jq -r '.[].password' | tr '\n' ' ')
-        #shells+=$(cat "test2.json" | jq -r '.[].shell' | tr '\n' ' ')
-        #groups+=$(cat "test2.json" | jq '.[].groups[]' | tr '\n' ' ')
+        tmpuname=( $(awk -F',' 'NR>1 {print $1}' ${!x}) )
+        tmppw+=( $(awk -F',' 'NR>1 {print $2}' ${!x}) )
+        tmpsh+=( $(awk -F',' 'NR>1 {print $3}' ${!x}) )
+        #groups
+        data=$(awk -F',' 'NR>1 {print $4}' ${!x})
+        IFS=$'\n' read -d '' -ra arr <<< "$data"
+        for k in "${!arr[@]}"; do
+            groups["$usernum"]="${arr[$k]}"
+            ((usernum++))
+        done
+        usernames+=("${tmpuname[@]}")
+        for str in ${tmppw[@]} ; do
+            for n in $str ; do
+                n=$(echo "$n" | sed 's/ //g')
+                passwords+=("$n")
+            done
+        done
+        for str in ${tmpsh[@]} ; do
+            for n in $str ; do
+                n=$(echo "$n" | sed 's/ //g')
+                shells+=("$n")
+            done
+        done
+        unset tmpuname
+        unset tmppw
+        unset tmpsh
+        declare -a tmpuname
+        declare -a tmppw
+        declare -a tmpsh
+    elif [[ "$file_type" =~ JSON ]] ; then
+        tmpuname=" $(cat "${!x}" | jq -r '.[].username' | tr '\n' ' ')"
+        passwords+=" $(cat "${!x}" | jq -r '.[].password' | tr '\n' ' ')"
+        shells+=" $(cat "${!x}" | jq -r '.[].shell' | tr '\n' ' ')"
+        groups+=" $(cat "${!x}" | jq -r '.[].groups | @sh' | tr '\n' ' ')"
+        usernames+=( "${tmpuname[@]}" )
+        for n in $tmppw ; do
+            n=$(echo "$n" | sed 's/ //g')
+            passwords+=("$n")
+        done
+        for n in $tmpsh ; do
+            n=$(echo "$n" | sed 's/ //g')
+            shells+=("$n")
+        done
+        unset tmpuname
+        unset tmppw
+        unset tmpsh
+        declare -a tmpuname
+        declare -a tmppw
+        declare -a tmpsh
+        usernum=" $(echo "${usernames[@]}" | tr ' ' '\n' | wc -l)"
     else
-        echo "Error: Invalid file format."
+        echo -n "Error: Invalid file format."  >&2
         exit 1
     fi
 done
 
 echo -n "This script will create the following user(s): "
-echo -n "${usernames[@]}"
+echo -n ${usernames[@]}
 echo -n " Do you want to continue? [y/n]:"
-read confirm
+read -r confirm
 if [ "$confirm" == "n" ] || [ -z "$confirm" ] ; then
     exit 0
 fi
 
+n=0
+for user in ${usernames[@]}; do
+    password=$(echo ${passwords[n]}} | sed 's/ //g')
+    shell=$(echo ${shells[n]} | sed 's/ //g')
+    # Check if user already exists
+    if id "$user" >/dev/null 2>&1; then
+        echo "Warning: user ${user} already exists."
+        ((n++))
+        continue
+    fi
+    
+    # Create user with username, password, and shell
+    pw useradd -m -s "${shell}" -n "$user"
+    sudo echo "${password}" | pw usermod -n "$user" -h 0 | bash
 
-
+    # Add user to groups
+    for group in ${groups[n]}; do
+        group=$(echo $group | sed 's/ //g')
+        # Check if group already exists
+        if ! getent group "${group}" >/dev/null 2>&1; then
+            # Group does not exist, create it
+            pw groupadd "${group}"
+        fi
+        # Add user to group
+        pw groupmod "${group}" -m "${user}"
+    done
+    ((n++))
+done
