@@ -3,21 +3,24 @@
 		"username": "admin_cat",
 		"password": "cat001",
 		"shell": "/bin/sh",
-		"groups": [
-		"wheel",
-		"operator"
-		]
+		"groups": []
 	},
     {
       "username": "meow_55",
       "password": "cat002",
       "shell": "/bin/tcsh",
-      "groups": []
+      "groups": [
+      "wheel",
+      "operator"
+      ]
     },
     {
       "username": "meow_3",
       "password": "cat003",
       "shell": "/bin/csh",
-      "groups": []
+      "groups": [
+      "2",
+      "o"
+      ]
     }
   ]

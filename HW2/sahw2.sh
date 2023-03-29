@@ -124,15 +124,18 @@ for j in $(seq 1 "$NUM"); do
     file_type=$(file -b "${!x}")
     if [[ "$file_type" =~ CSV ]] ; then 
         tmpuname=( $(awk -F',' 'NR>1 {print $1}' ${!x}) )
-        tmppw+=( $(awk -F',' 'NR>1 {print $2}' ${!x}) )
-        tmpsh+=( $(awk -F',' 'NR>1 {print $3}' ${!x}) )
+        tmppw=( $(awk -F',' 'NR>1 {print $2}' ${!x}) )
+        tmpsh=( $(awk -F',' 'NR>1 {print $3}' ${!x}) )
         #groups
-        data=$(awk -F',' 'NR>1 {print $4}' ${!x})
+        data=$(awk -F',' 'NR>1 {if ($4=="") {$4=" "}; print $4}' ${!x})
         IFS=$'\n' read -d '' -ra arr <<< "$data"
+        l=0
         for k in "${!arr[@]}"; do
-            groups["$usernum"]="${arr[$k]}"
-            ((usernum++))
+            groups[(($l+$usernum))]="${arr[$k]}"
+            ((l++))
         done
+        m="${#tmpuname[@]}"
+        usernum=$((usernum+m))
         usernames+=("${tmpuname[@]}")
         for str in ${tmppw[@]} ; do
             for n in $str ; do
@@ -153,17 +156,33 @@ for j in $(seq 1 "$NUM"); do
         declare -a tmppw
         declare -a tmpsh
     elif [[ "$file_type" =~ JSON ]] ; then
-        tmpuname=" $(cat "${!x}" | jq -r '.[].username' | tr '\n' ' ')"
-        passwords+=" $(cat "${!x}" | jq -r '.[].password' | tr '\n' ' ')"
-        shells+=" $(cat "${!x}" | jq -r '.[].shell' | tr '\n' ' ')"
-        groups+=" $(cat "${!x}" | jq -r '.[].groups | @sh' | tr '\n' ' ')"
-        usernames+=( "${tmpuname[@]}" )
+        tmpuname="$(cat "${!x}" | jq -r '.[].username' | tr '\n' ' ')"
+        tmppw="$(cat "${!x}" | jq -r '.[].password' | tr '\n' ' ')"
+        tmpsh="$(cat "${!x}" | jq -r '.[].shell' | tr '\n' ' ')"
+
+        data="$(cat "${!x}" | jq -r '.[].groups | join(" ")')"
+        data="$(echo "$data" | sed 's/^/ /')"
+        IFS=$'\n' read -r -d '' -a arr <<< "$data"
+        N=0
+        for element in "${arr[@]}"; do
+            groups[((usernum+N))]="$element"
+            ((N++))
+        done
+
+        for n in $tmpuname ; do
+            n=$(echo "$n" | sed 's/ //g')
+            n=$(echo "$n" | sed "s/'//g")
+            usernames+=("$n")
+            ((usernum++))
+        done
         for n in $tmppw ; do
             n=$(echo "$n" | sed 's/ //g')
+            n=$(echo "$n" | sed "s/'//g")
             passwords+=("$n")
         done
         for n in $tmpsh ; do
             n=$(echo "$n" | sed 's/ //g')
+            n=$(echo "$n" | sed "s/'//g")            
             shells+=("$n")
         done
         unset tmpuname
@@ -172,7 +191,6 @@ for j in $(seq 1 "$NUM"); do
         declare -a tmpuname
         declare -a tmppw
         declare -a tmpsh
-        usernum=" $(echo "${usernames[@]}" | tr ' ' '\n' | wc -l)"
     else
         echo -n "Error: Invalid file format."  >&2
         exit 1
@@ -189,7 +207,9 @@ fi
 
 n=0
 for user in ${usernames[@]}; do
-    password=$(echo ${passwords[n]}} | sed 's/ //g')
+    user=$(echo $user | sed 's/ //g')
+    user=$(echo $user | sed "s/'//g")
+    password=$(echo ${passwords[n]} | sed 's/ //g')
     shell=$(echo ${shells[n]} | sed 's/ //g')
     # Check if user already exists
     if id "$user" >/dev/null 2>&1; then
@@ -199,19 +219,24 @@ for user in ${usernames[@]}; do
     fi
     
     # Create user with username, password, and shell
-    pw useradd -m -s "${shell}" -n "$user"
-    sudo echo "${password}" | pw usermod -n "$user" -h 0 | bash
+    sudo pw useradd -m -s "${shell}" -n "$user"
+    sudo echo "${password}" | sudo pw usermod -n "$user" -h 0
 
     # Add user to groups
-    for group in ${groups[n]}; do
+    for group in ${groups[n]} ; do
         group=$(echo $group | sed 's/ //g')
-        # Check if group already exists
-        if ! getent group "${group}" >/dev/null 2>&1; then
-            # Group does not exist, create it
-            pw groupadd "${group}"
+        
+        if [[ -z "$group" ]] || [[ "$group" == " " ]]; then
+            continue
+        else
+            # Check if group already exists
+            if ! getent group "$group" >/dev/null 2>&1; then
+                # Group does not exist, create it
+                sudo pw groupadd "$group"
+            fi
+            # Add user to group
+            sudo pw groupmod "$group" -m "$user"        
         fi
-        # Add user to group
-        pw groupmod "${group}" -m "${user}"
     done
     ((n++))
 done
